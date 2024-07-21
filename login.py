@@ -266,69 +266,74 @@ def render_equipment_page():
             st.success("Equipment deleted successfully")
 
 def render_crops_page():
+    st.header("Crops")
+    action = st.selectbox("Choose action", ["View", "Add", "Edit", "Delete"])
 
-    st.title("Crops Management")
-
-    st.sidebar.title("Crops Operations")
-    operation = st.sidebar.selectbox("Select Operation", ["Add Crop", "View Crops", "Edit Crop", "Delete Crop"])
-
-    if operation == "Add Crop":
-        st.header("Add New Crop")
-        crop_name = st.text_input("Crop Name")
-        variety = st.text_input("Variety")
-        planting_date = st.date_input("Planting Date")
-        expected_harvest_date = st.date_input("Expected Harvest Date")
-        description = st.text_area("Description")
-        part_of_country = st.text_input("Part of Country")
-        soil_type = st.text_input("Soil Type")
-        images = st.text_input("Image URL")
-        farm_id = st.number_input("Farm ID", min_value=1, step=1)
-
-        if st.button("Add Crop"):
-            run_query("""
-                INSERT INTO Crop (crop_name, variety, planting_date, expected_harvest_date, description, part_of_country, soil_type, images, farm_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (crop_name, variety, planting_date, expected_harvest_date, description, part_of_country, soil_type, images, farm_id))
-            run_query("commit()")
-            st.success("Crop added successfully!")
-
-    elif operation == "View Crops":
-        st.header("View All Crops")
-        df=run_query("SELECT * FROM Crop")
+    if action == "View":
+        df = run_query("SELECT * FROM Crop")
         st.write(df)
-    elif operation == "Edit Crop":
-        st.header("Edit Crop")
-        crop_id = st.number_input("Enter Crop ID to edit", min_value=1, step=1)
-        run_query("SELECT * FROM Crop WHERE crop_id=%s", (crop_id,))
-        crop = run_query("fetchone()")
-        if crop:
-            crop_name = st.text_input("Crop Name", crop[1])
-            variety = st.text_input("Variety", crop[2])
-            planting_date = st.date_input("Planting Date", crop[3])
-            expected_harvest_date = st.date_input("Expected Harvest Date", crop[4])
-            description = st.text_area("Description", crop[5])
-            part_of_country = st.text_input("Part of Country", crop[6])
-            soil_type = st.text_input("Soil Type", crop[7])
-            images = st.text_input("Image URL", crop[8])
-            farm_id = st.number_input("Farm ID", min_value=1, step=1, value=crop[9])
 
-            if st.button("Update Crop"):
-                run_query("""
-                    UPDATE Crop SET crop_name=%s, variety=%s, planting_date=%s, expected_harvest_date=%s, description=%s, part_of_country=%s, soil_type=%s, images=%s, farm_id=%s
-                    WHERE crop_id=%s
+    elif action == "Add":
+        with st.form("Add Crop"):
+            crop_name = st.text_input("Crop Name")
+            variety = st.text_input("Variety")
+            planting_date = st.date_input("Planting Date")
+            expected_harvest_date = st.date_input("Expected Harvest Date")
+            description = st.text_area("Description")
+            part_of_country = st.text_input("Part of Country")
+            soil_type = st.text_input("Soil Type")
+            images = st.text_input("Image URL")
+            farms = run_query("SELECT farm_id, location FROM Farm")
+            farm_dict = {row['location']: row['farm_id'] for index, row in farms.iterrows()}
+            farm_location = st.selectbox("Farm", list(farm_dict.keys()))
+            submitted = st.form_submit_button("Add Crop")
+            if submitted:
+                farm_id = farm_dict[farm_location]
+                run_action("""
+                    INSERT INTO Crop (crop_name, variety, planting_date, expected_harvest_date, description, part_of_country, soil_type, images, farm_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (crop_name, variety, planting_date, expected_harvest_date, description, part_of_country, soil_type, images, farm_id))
+                st.success("Crop added successfully")
+
+    elif action == "Edit":
+        crops = run_query("SELECT crop_id, crop_name FROM Crop")
+        crop_dict = {row['crop_name']: row['crop_id'] for index, row in crops.iterrows()}
+        crop_name = st.selectbox("Choose a crop to edit", list(crop_dict.keys()))
+        crop_id = crop_dict[crop_name]
+        crop = run_query(f"SELECT * FROM Crop WHERE crop_id = {crop_id}").iloc[0]
+
+        with st.form("Edit Crop"):
+            crop_name = st.text_input("Crop Name", value=crop['crop_name'])
+            variety = st.text_input("Variety", value=crop['variety'])
+            planting_date = st.date_input("Planting Date", value=crop['planting_date'])
+            expected_harvest_date = st.date_input("Expected Harvest Date", value=crop['expected_harvest_date'])
+            description = st.text_area("Description", value=crop['description'])
+            part_of_country = st.text_input("Part of Country", value=crop['part_of_country'])
+            soil_type = st.text_input("Soil Type", value=crop['soil_type'])
+            images = st.text_input("Image URL", value=crop['images'])
+            farms = run_query("SELECT farm_id, location FROM Farm")
+            farm_dict = {row['location']: row['farm_id'] for index, row in farms.iterrows()}
+            farm_location = st.selectbox("Farm", list(farm_dict.keys()))
+            farm_id = farm_dict[farm_location]
+            submitted = st.form_submit_button("Update Crop")
+            if submitted:
+                run_action("""
+                    UPDATE Crop 
+                    SET crop_name = %s, variety = %s, planting_date = %s, expected_harvest_date = %s, description = %s, part_of_country = %s, soil_type = %s, images = %s, farm_id = %s
+                    WHERE crop_id = %s
                 """, (crop_name, variety, planting_date, expected_harvest_date, description, part_of_country, soil_type, images, farm_id, crop_id))
-                run_query("commit()")
-                st.success("Crop updated successfully!")
-        else:
-            st.error("Crop ID not found")
+                st.success("Crop updated successfully")
 
-    elif operation == "Delete Crop":
-        st.header("Delete Crop")
-        crop_id = st.number_input("Enter Crop ID to delete", min_value=1, step=1)
+    elif action == "Delete":
+        crops = run_query("SELECT crop_id, crop_name FROM Crop")
+        crop_dict = {row['crop_name']: row['crop_id'] for index, row in crops.iterrows()}
+        crop_name = st.selectbox("Choose a crop to delete", list(crop_dict.keys()))
+        crop_id = crop_dict[crop_name]
+
         if st.button("Delete Crop"):
-            run_query("DELETE FROM Crop WHERE crop_id=%s", (crop_id,))
-            run_query("commit()")
-            st.success("Crop deleted successfully!")
+            run_action("DELETE FROM Crop WHERE crop_id = %s", (crop_id,))
+            st.success("Crop deleted successfully")
+
 def render_crop_inventory_page():
     st.header("Crop Inventory")
     action = st.selectbox("Choose action", ["View", "Add", "Edit", "Delete"])
@@ -338,44 +343,40 @@ def render_crop_inventory_page():
         st.write(df)
 
     elif action == "Add":
-        crops = run_query("SELECT crop_id FROM Crop")
-        crop_dict = {row['crop_id'] for index, row in crops.iterrows()}
-        with st.form("Add Crop Inventory"):
-            crop_name = st.selectbox("Crop", list(crop_dict.keys()))
-            quantity = st.number_input("Quantity", min_value=0)
-            submitted = st.form_submit_button("Add Crop Inventory")
+        with st.form("Add Inventory"):
+            crop_id = st.number_input("Crop ID", min_value=1, step=1)
+            quantity = st.number_input("Quantity", min_value=0.0, step=0.01)
+            submitted = st.form_submit_button("Add Inventory")
             if submitted:
-                crop_id = crop_dict[crop_name]
                 run_action("INSERT INTO crop_inventory (crop_id, quantity) VALUES (%s, %s)", (crop_id, quantity))
-                st.success("Crop Inventory added successfully")
+                st.success("Inventory added successfully")
 
     elif action == "Edit":
-        inventory = run_query("SELECT inventory_id, crop_id FROM crop_inventory")
-        inventory_dict = {f"Crop ID: {row['crop_id']}, Inventory ID: {row['inventory_id']}": row['inventory_id'] for index, row in inventory.iterrows()}
-        inventory_choice = st.selectbox("Choose inventory to edit", list(inventory_dict.keys()))
-        inventory_id = inventory_dict[inventory_choice]
-        inventory_item = run_query(f"SELECT * FROM crop_inventory WHERE inventory_id = {inventory_id}").iloc[0]
+        inventories = run_query("SELECT inventory_id, crop_id FROM crop_inventory")
+        inventory_dict = {f"Inventory {row['inventory_id']} for Crop {row['crop_id']}": row['inventory_id'] for index, row in inventories.iterrows()}
+        inventory_key = st.selectbox("Choose an inventory to edit", list(inventory_dict.keys()))
+        inventory_id = inventory_dict[inventory_key]
+        inventory = run_query(f"SELECT * FROM crop_inventory WHERE inventory_id = {inventory_id}").iloc[0]
 
-        crops = run_query("SELECT crop_id FROM Crop")
-        crop_dict = {row['crop_id']: row['crop_id'] for index, row in crops.iterrows()}
-
-        with st.form("Edit Crop Inventory"):
-            crop_id = st.selectbox("Crop ID", list(crop_dict.keys()), index=list(crop_dict.keys()).index(inventory_item['crop_id']))
-            quantity = st.number_input("Quantity", value=inventory_item['quantity'], min_value=0)
-            submitted = st.form_submit_button("Update Crop Inventory")
+        with st.form("Edit Inventory"):
+            crop_id = st.number_input("Crop ID", min_value=1, step=1, value=inventory['crop_id'])
+            quantity = st.number_input("Quantity", min_value=0.0, step=0.01, value=inventory['quantity'])
+            submitted = st.form_submit_button("Update Inventory")
             if submitted:
                 run_action("UPDATE crop_inventory SET crop_id = %s, quantity = %s WHERE inventory_id = %s", (crop_id, quantity, inventory_id))
-                st.success("Crop Inventory updated successfully")
+                st.success("Inventory updated successfully")
 
     elif action == "Delete":
-        inventory = run_query("SELECT inventory_id, crop_id FROM crop_inventory")
-        inventory_dict = {f"Crop ID: {row['crop_id']}, Inventory ID: {row['inventory_id']}": row['inventory_id'] for index, row in inventory.iterrows()}
-        inventory_choice = st.selectbox("Choose inventory to delete", list(inventory_dict.keys()))
-        inventory_id = inventory_dict[inventory_choice]
+        inventories = run_query("SELECT inventory_id, crop_id FROM crop_inventory")
+        inventory_dict = {f"Inventory {row['inventory_id']} for Crop {row['crop_id']}": row['inventory_id'] for index, row in inventories.iterrows()}
+        inventory_key = st.selectbox("Choose an inventory to delete", list(inventory_dict.keys()))
+        inventory_id = inventory_dict[inventory_key]
 
-        if st.button("Delete Crop Inventory"):
+        if st.button("Delete Inventory"):
             run_action("DELETE FROM crop_inventory WHERE inventory_id = %s", (inventory_id,))
-            st.success("Crop Inventory deleted successfully")
+            st.success("Inventory deleted successfully")
+
+
 def send_message(worker_id, worker_name, farmer_name, money, message):
     conn = get_connection()
     if conn:
